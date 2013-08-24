@@ -3,17 +3,11 @@ import re
 
 class ELockException(Exception): pass
 
-class ResourceLocked(ELockException): pass
-
-class NotLocked(ELockException): pass
-
-class NotResumable(ELockException): pass
-
 class BadRequest(ELockException): pass
-
 class BadResponse(ELockException): pass
-
+class LockInUse(ELockException): pass
 class Timeout(ELockException): pass
+class ConnectionClosed(ELockException): pass
 
 class ELock(object):
     """The elock protocol."""
@@ -32,11 +26,28 @@ class ELock(object):
         if code != 200:
             raise BadResponse()
 
+    def close(self):
+        '''
+        Closes the connection to the elock server.
+        Note that this will immediately release all held locks.
+        '''
+        if self.socket:
+            self.socket.close()
+            self.socket = None
+
     def __del__(self):
-        self.socket.close()
-        del self.socket
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
 
     def __cmd(self, command, timeout=10.0):
+        if not self.socket:
+            raise ConnectionClosed()
+
         self.socket.settimeout(timeout)
         self.socket.sendall(command + "\r\n")
         buffer = ""
@@ -50,16 +61,6 @@ class ELock(object):
             code, message = self.__read_status(buffer)
         except:
             raise BadResponse()
-
-        '''match = re.match('^([0-9]{3}) (.+)$', buffer)
-        if not match:
-            raise BadResponse()
-
-        code,message = match.groups()
-        try:
-            code = int(code)
-        except:
-            raise BadResponse()'''
 
         if code == 400:
             raise BadRequest()
@@ -114,3 +115,18 @@ class ELock(object):
     def __read_status(self, line):
         status, msg = line.strip().split(' ', 1)
         return int(status), msg
+
+class ELockSingle(object):
+    def __init__(self, remote_endpoint, lock_name, timeout=None):
+        self.elock = ELock(remote_endpoint)
+        if not self.elock.lock(lock_name, timeout):
+            raise LockInUse()
+
+    def __del__(self):
+        self.elock.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.elock.close()
