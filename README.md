@@ -1,9 +1,15 @@
 pyelock
 =======
 
-Pure Python wrapper for https://github.com/dustin/elock .  If you are already
-using Twisted in your project, check out https://github.com/dustin/elock-twisted
-instead.
+Pure Python wrapper for https://github.com/dustin/elock .
+
+elock is "A simple, fault-tolerant distributed lock server in erlang."  Using
+it in Python allows you to do all sorts of cool stuff, like ensuring a Celery
+task doesn't run more than once simultaneously, even across different Celery
+servers.
+
+Note, if you are already using Twisted in your project, you should check out
+dustin's wrapper at https://github.com/dustin/elock-twisted .
 
 Usage
 =====
@@ -13,6 +19,15 @@ Simple Single Lock
 
 If you need to lock a single lock, perform a task, and then release it,
 use the following code:
+
+```python
+try:
+  with pyelock.ELockSingle(('remote-server.domain.com', 11400), 'my_lock'):
+    # Do some stuff
+    time.sleep(10)
+except pyelock.LockInUse:
+  print "Can't do stuff, my_lock is in use"
+```
 
 More complex use cases
 ----------------------
