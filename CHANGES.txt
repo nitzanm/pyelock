@@ -1,1 +1,2 @@
+v1.1, 2013-08-27 -- Improved documentation.
 v1.0, 2013-08-24 -- Initial release.
