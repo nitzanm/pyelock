@@ -10,12 +10,14 @@ class Timeout(ELockException): pass
 class ConnectionClosed(ELockException): pass
 
 class ELock(object):
-    """The elock protocol."""
+    """Communicates with an elock server to perform operations on locks."""
 
     def __init__(self, remote_endpoint):
         '''
         Initializes an elock session.
         @param remote_endpoint elock server endpoint, e.g. ('127.0.0.1', 11400).
+        @raise socket.error: If a communications error with the server occurs.
+        @raise ELockException: If the server returns a bad response.
         '''
         self.socket = socket.socket()
         self.socket.connect(remote_endpoint)
@@ -30,19 +32,62 @@ class ELock(object):
         '''
         Closes the connection to the elock server.
         Note that this will immediately release all held locks.
+        @raise socket.error: If a communications error with the server occurs.
         '''
         if self.socket:
             self.socket.close()
             self.socket = None
 
-    def __del__(self):
-        self.close()
+    def lock(self, name, timeout=None):
+        '''
+        Acquire a lock.
+        @name Name of the lock (cannot contain spaces).
+        @timeout Time to wait for the lock if it's in use, in seconds.
+            If None (the default), return immediately if the lock is in use.
+        @return True if the lock was acquired; False otherwise.
+        @raise socket.error: If a communications error with the server occurs.
+        @raise ELockException: If the server returns a bad response.
+        @note If you already hold a lock, locking it again will succeed.  However,
+            multiple holds will not stack, such that a single unlock() will release
+            the lock entirely, even after a number of lock() calls.
+        '''
 
-    def __enter__(self):
-        return self
+        cmd = 'lock %s%s' % (name, ' ' + str(timeout) if timeout else '')
+        code, response = self.__cmd(cmd, timeout=(timeout or 0) + 10.0)
+        if code == 200:
+            return True
+        elif code == 409:
+            return False
+        else:
+            raise BadResponse()
 
-    def __exit__(self, type, value, traceback):
-        self.close()
+    def unlock(self, name):
+        '''
+        Release an acquired lock.
+        @name Name of the lock (cannot contain spaces).
+        @return True if the lock was released; False if you did not own the lock.
+        @raise socket.error: If a communications error with the server occurs.
+        @raise ELockException: If the server returns a bad response.
+        '''
+        code, response = self.__cmd('unlock ' + name)
+        if code == 200:
+            return True
+        elif code == 403:
+            return False
+        else:
+            raise BadResponse()
+
+    def unlock_all(self):
+        '''
+        Releases all locks held by the current session.
+        @return True
+        @raise socket.error: If a communications error with the server occurs.
+        @raise ELockException: If the server returns a bad response.
+        '''
+        code, response = self.__cmd('unlock_all')
+        if code != 200:
+            raise BadResponse()
+        return True
 
     def __cmd(self, command, timeout=10.0):
         if not self.socket:
@@ -67,54 +112,18 @@ class ELock(object):
 
         return code,message
 
-    def lock(self, name, timeout=None):
-        '''
-        Acquire a lock.
-        @name Name of the lock (cannot contain spaces).
-        @timeout Time to wait for the lock if it's in use, in seconds.
-            If None (the default), return immediately if the lock is in use.
-        @return True if the lock was acquired; False otherwise.
-        @note If you already hold a lock, locking it again will succeed.  However,
-            multiple holds will not stack, such that a single unlock() will release
-            the lock entirely, even after a number of lock() calls.
-        '''
-
-        cmd = 'lock %s%s' % (name, ' ' + str(timeout) if timeout else '')
-        code, response = self.__cmd(cmd, timeout=(timeout or 0) + 10.0)
-        if code == 200:
-            return True
-        elif code == 409:
-            return False
-        else:
-            raise BadResponse()
-
-    def unlock(self, name):
-        '''
-        Release an acquired lock.
-        @name Name of the lock (cannot contain spaces).
-        @return True if the lock was released; False if you did not own the lock.
-        '''
-        code, response = self.__cmd('unlock ' + name)
-        if code == 200:
-            return True
-        elif code == 403:
-            return False
-        else:
-            raise BadResponse()
-
-    def unlock_all(self):
-        '''
-        Releases all locks held by the current session.
-        @return True
-        '''
-        code, response = self.__cmd('unlock_all')
-        if code != 200:
-            raise BadResponse()
-        return True
-
     def __read_status(self, line):
         status, msg = line.strip().split(' ', 1)
         return int(status), msg
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
 
 class ELockSingle(object):
     def __init__(self, remote_endpoint, lock_name, timeout=None):
