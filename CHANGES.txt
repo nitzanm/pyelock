@@ -1,2 +1,3 @@
-v1.1, 2013-08-27 -- Improved documentation.
-v1.0, 2013-08-24 -- Initial release.
+v1.0.2, 2014-05-03 -- Fixed an infinite loop when the connection with elock is closed while waiting for a response.
+v1.0.1, 2013-08-27 -- Improved documentation.
+v1.0.0, 2013-08-24 -- Initial release.
