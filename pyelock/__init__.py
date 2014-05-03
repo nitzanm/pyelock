@@ -98,7 +98,17 @@ class ELock(object):
         buffer = ""
         while '\r\n' not in buffer:
             try:
-                buffer += self.socket.recv(1024)
+                # Note: socket.recv can return zero bytes if the connection was closed gracefully.
+                newdata = self.socket.recv(1024)
+                if len(newdata) < 1:
+                    self.close()
+                    raise ConnectionClosed()
+                buffer += newdata
+
+                # Guard against an endlessly filling buffer
+                if len(buffer) > 2048:
+                    self.close()
+                    raise BadResponse()
             except socket.timeout as e:
                 raise Timeout()
 

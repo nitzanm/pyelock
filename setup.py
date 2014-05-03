@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='PyELock',
-    version='1.0.1',
+    version='1.0.2',
     author='Nitzan Miron',
     author_email='nitzanm@gmail.com',
     packages=['pyelock'],
